@@ -1,0 +1,179 @@
+import { useState, useEffect } from 'react';
+import { api } from '../api/client';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+
+const COLORS = ['#1a7a4a', '#1565c0', '#e65100', '#c62828', '#7b1fa2'];
+
+const ACTION_ICONS = {
+  login: '🔑', logout: '🚪', view_patient: '👁️', list_patients: '📋',
+  record_vitals: '📊', view_vitals: '📊', view_consultation: '🩺',
+  list_consultations: '🩺', create_consultation: '➕', update_consultation: '✏️',
+  create_prescription: '💊', view_admin_stats: '📈', register: '✅',
+  view_own_record: '👤', export_data: '📤',
+};
+
+export default function AdminDashboard() {
+  const [stats, setStats] = useState(null);
+  const [tab, setTab] = useState('overview');
+  const [patients, setPatients] = useState([]);
+  const [audit, setAudit] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const s = await api.get('/admin/stats');
+      setStats(s);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'patients' && !patients.length) api.get('/admin/patients').then(setPatients);
+    if (tab === 'audit' && !audit.length) api.get('/admin/audit?limit=100').then(setAudit);
+  }, [tab]);
+
+  if (loading) return <div className="loading">Loading admin dashboard…</div>;
+
+  const consultStatusData = Object.entries(stats.consultationsByStatus || {}).map(([k, v]) => ({ name: k, value: v }));
+  const conditionsData = stats.topConditions || [];
+  const roleData = Object.entries(stats.usersByRole || {}).map(([k, v]) => ({ name: k, value: v }));
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Admin Dashboard</h2>
+        <span className="badge badge-green">● Live</span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 0, padding: '0 28px', background: 'white', borderBottom: '1px solid var(--gray-200)' }}>
+        {['overview', 'patients', 'audit'].map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ padding: '12px 20px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: tab === t ? 700 : 400,
+              color: tab === t ? 'var(--green)' : 'var(--gray-600)', borderBottom: tab === t ? '2px solid var(--green)' : '2px solid transparent', fontSize: 14 }}>
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <div className="page-body">
+        {tab === 'overview' && (
+          <>
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="label">Total Patients</div>
+                <div className="value">{stats.totalPatients}</div>
+                <div className="sub">Registered in El Nido</div>
+              </div>
+              <div className="stat-card">
+                <div className="label">Consultations</div>
+                <div className="value">{Object.values(stats.consultationsByStatus || {}).reduce((a, b) => a + b, 0)}</div>
+                <div className="sub">{stats.consultationsByStatus?.completed || 0} completed</div>
+              </div>
+              <div className="stat-card">
+                <div className="label">Vitals (7 days)</div>
+                <div className="value">{stats.vitalsLast7Days}</div>
+                <div className="sub">CHW recordings</div>
+              </div>
+              <div className="stat-card">
+                <div className="label">Active Users</div>
+                <div className="value">{Object.values(stats.usersByRole || {}).reduce((a, b) => a + b, 0)}</div>
+                <div className="sub">Across all roles</div>
+              </div>
+            </div>
+
+            <div className="two-col">
+              <div className="card">
+                <div className="card-title">Top Conditions</div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={conditionsData} layout="vertical">
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="condition" tick={{ fontSize: 12 }} width={50} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#1a7a4a" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="card">
+                <div className="card-title">Users by Role</div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <PieChart>
+                    <Pie data={roleData} cx="50%" cy="50%" outerRadius={65} dataKey="value" nameKey="name" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                      {roleData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-title">Recent Activity (Audit Log)</div>
+              {(stats.recentAuditEvents || []).slice(0, 10).map(e => (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--gray-100)' }}>
+                  <span style={{ fontSize: 18, width: 28, textAlign: 'center' }}>{ACTION_ICONS[e.action] || '📌'}</span>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{e.action.replace(/_/g, ' ')}</span>
+                    {e.email && <span className="text-muted" style={{ marginLeft: 8 }}>{e.email}</span>}
+                  </div>
+                  <span className={`badge ${e.outcome === 'success' ? 'badge-green' : 'badge-red'}`}>{e.outcome}</span>
+                  <span className="text-muted" style={{ fontSize: 11, width: 140, textAlign: 'right' }}>{new Date(e.occurred_at).toLocaleString('en-PH')}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {tab === 'patients' && (
+          <div className="card" style={{ padding: 0 }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-200)', fontWeight: 600 }}>All Patients ({patients.length})</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Barangay</th><th>Conditions</th><th>PhilHealth</th><th>Vitals</th><th>Last Vitals</th><th>Account</th></tr></thead>
+                <tbody>
+                  {patients.map(p => (
+                    <tr key={p.id}>
+                      <td><strong>{p.full_name}</strong><br /><span className="text-muted">{new Date(p.date_of_birth).toLocaleDateString('en-PH')}</span></td>
+                      <td>{p.barangay || '—'}</td>
+                      <td>{(p.conditions || []).map(c => <span key={c} className="badge badge-amber" style={{ marginRight: 4 }}>{c}</span>)}</td>
+                      <td className="text-muted">{p.philhealth_no || '—'}</td>
+                      <td>{p.vitals_count || 0}</td>
+                      <td className="text-muted">{p.last_vitals ? new Date(p.last_vitals).toLocaleDateString('en-PH') : '—'}</td>
+                      <td><span className={`badge ${p.email ? 'badge-green' : 'badge-gray'}`}>{p.email ? 'App' : 'CHW only'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {tab === 'audit' && (
+          <div className="card" style={{ padding: 0 }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-200)', fontWeight: 600 }}>
+              Audit Log — Last 100 events
+              <span className="text-muted" style={{ fontWeight: 400, marginLeft: 10, fontSize: 12 }}>Append-only · RA 10173 compliant</span>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Time (PST)</th><th>User</th><th>Role</th><th>Action</th><th>Resource</th><th>Outcome</th></tr></thead>
+                <tbody>
+                  {audit.map(e => (
+                    <tr key={e.id}>
+                      <td className="text-muted" style={{ fontSize: 12 }}>{new Date(e.occurred_at).toLocaleString('en-PH')}</td>
+                      <td style={{ fontSize: 13 }}>{e.email || <span className="text-muted">—</span>}</td>
+                      <td><span className="badge badge-gray">{e.actor_role || '—'}</span></td>
+                      <td style={{ fontSize: 13 }}>{ACTION_ICONS[e.action] || ''} {e.action.replace(/_/g, ' ')}</td>
+                      <td className="text-muted" style={{ fontSize: 12 }}>{e.resource_type || '—'}</td>
+                      <td><span className={`badge ${e.outcome === 'success' ? 'badge-green' : 'badge-red'}`}>{e.outcome}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

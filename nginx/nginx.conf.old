@@ -1,0 +1,37 @@
+# nginx/nginx.conf
+user  nginx;
+worker_processes auto;
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    keepalive_timeout 65;
+
+    # ── Rate limiting zones ─────────────────────────────────────────
+    # Auth endpoints — strict: 10 req/min per IP
+    limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/m;
+    # API endpoints — moderate: 60 req/min per IP
+    limit_req_zone $binary_remote_addr zone=api:10m  rate=60r/m;
+    # Triage chat — relaxed: 20 req/min (AI is slow anyway)
+    limit_req_zone $binary_remote_addr zone=triage:10m rate=20r/m;
+
+    limit_req_status 429;
+
+    # ── Request ID ─────────────────────────────────────────────────
+    # Generates a unique ID per request for end-to-end tracing
+    # Requires nginx built with --with-http_random_index_module
+    # Falls back gracefully if module not present
+    map $http_x_request_id $request_id {
+        default $http_x_request_id;
+        ""      $pid-$msec;
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+}
