@@ -1,7 +1,5 @@
 #!/bin/bash
-set -e
-
-echo "🚀 Starting Ollama server..."
+# Start Ollama server in background
 ollama serve &
 SERVER_PID=$!
 
@@ -14,13 +12,13 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
-MODEL="llama3.2:3b"
+MODEL="gemma4:e4b"
 echo "🔍 Checking if $MODEL is already downloaded..."
 
-if ollama list 2>/dev/null | grep -q "llama3.2"; then
+if ollama list 2>/dev/null | grep -q "gemma4:e4b"; then
   echo "✅ Model $MODEL already present — skipping pull"
 else
-  echo "📥 Pulling $MODEL (~2GB — first run only)..."
+  echo "📥 Pulling $MODEL (~7.2GB — first run only, this takes a few minutes)..."
   ollama pull "$MODEL"
   echo "✅ Model $MODEL ready"
 fi

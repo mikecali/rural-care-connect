@@ -82,9 +82,7 @@ services:
 
   # ── Frontend (nginx + TLS) ──────────────────────────────────────────
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    build: ./frontend
     container_name: rcc_frontend
     ports:
       - "3000:80"     # HTTP → redirects to HTTPS
@@ -105,3 +103,4 @@ services:
 volumes:
   pgdata:
   ollama_models:
+

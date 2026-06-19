@@ -8,7 +8,9 @@ const patientRoutes      = require('./routes/patients');
 const vitalsRoutes       = require('./routes/vitals');
 const consultationRoutes = require('./routes/consultations');
 const adminRoutes        = require('./routes/admin');
-const triageRoutes       = require('./routes/triage');
+const triageRoutes        = require('./routes/triage');
+const surveillanceRoutes  = require('./routes/surveillance');
+const settingsRoutes      = require('./routes/settings');
 
 const app  = express();
 const PORT = process.env.PORT || 4000;
@@ -50,6 +52,8 @@ app.use('/api/vitals',        vitalsRoutes);
 app.use('/api/consultations', consultationRoutes);
 app.use('/api/admin',         adminRoutes);
 app.use('/api/triage',        triageRoutes);
+app.use('/api/surveillance', surveillanceRoutes);
+app.use('/api/settings',     settingsRoutes);
 
 // ── 404 ───────────────────────────────────────────────────────────────
 app.use((req, res) => {

@@ -1,11 +1,10 @@
 const router = require('express').Router();
-const { llmChat } = require('../lib/llm');
 const { pool } = require('../db/pool');
 const { authMiddleware } = require('../middleware/auth');
 const { auditLog } = require('../middleware/audit');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:e2b';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:3b';
 
 // ── Real El Nido emergency contacts ──────────────────────────────────
 const EMERGENCY_CONTACTS = `El Nido Community Hospital: (048) 719-4040 | El Nido Emergency/Police: 911 | El Nido Municipal Health Office: (048) 719-4033 | Barangay Health Emergency: 0917-888-8888`;
@@ -105,11 +104,25 @@ router.post('/chat', authMiddleware(['patient', 'chw', 'clinician']), async (req
   ];
 
   try {
-    const llmResult = await llmChat(messages, {
-      temperature: 0.2,
-      maxTokens: 350,  // Short replies — model asks ONE question at a time
+    const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        stream: false,
+        options: {
+          temperature: 0.2,
+          num_predict: 250,   // Short replies — model asks ONE question at a time
+          top_p: 0.9,
+          repeat_penalty: 1.1,
+        },
+        messages,
+      }),
     });
-    const reply = llmResult.content;
+
+    if (!ollamaRes.ok) throw new Error(`Ollama ${ollamaRes.status}`);
+    const data = await ollamaRes.json();
+    const reply = (data.message?.content || '').trim();
     const isSummary = reply.includes('[PRE-SCREENING SUMMARY]');
 
     await auditLog({ actorId: req.user.sub, actorRole: req.user.role, action: isSummary ? 'triage_summary_generated' : 'triage_chat', resourceType: 'triage', outcome: 'success', ip: req.ip });

@@ -1,6 +1,8 @@
 #!/bin/bash
 # load-test.sh — Generates realistic traffic across all RCC user roles
 # Usage: ./load-test.sh [rounds] [server]
+export PATH="/usr/bin:/bin:/usr/local/bin:$PATH"
+CURL=/usr/bin/curl
 
 SERVER="${2:-https://192.168.68.119:3443}"
 ROUNDS="${1:-10}"
@@ -53,7 +55,7 @@ hit() {
 
   local STATUS
   if [ "$METHOD" = "POST" ] && [ -n "$BODY" ]; then
-    STATUS=$(curl -sk -o /dev/null -w "%{http_code}" \
+    STATUS=$($CURL -sk -o /dev/null -w "%{http_code}" \
       -X POST "$SERVER$PATH" \
       -H "Authorization: Bearer $TOKEN" \
       -H "Content-Type: application/json" \
@@ -65,7 +67,7 @@ hit() {
       -H "Content-Type: application/json" \
       -d "$BODY")
   else
-    STATUS=$(curl -sk -o /dev/null -w "%{http_code}" \
+    STATUS=$($CURL -sk -o /dev/null -w "%{http_code}" \
       -H "Authorization: Bearer $TOKEN" \
       "$SERVER$PATH")
   fi
@@ -133,7 +135,7 @@ for i in $(seq 1 $ROUNDS); do
 
   # Simulate failed login every 3 rounds
   if (( i % 3 == 0 )); then
-    curl -sk -o /dev/null -X POST "$SERVER/api/auth/login" \
+    $CURL -sk -o /dev/null -X POST "$SERVER/api/auth/login" \
       -H "Content-Type: application/json" \
       -d '{"email":"hacker@test.com","password":"wrongpassword"}'
     echo "  ⚠️  [401] Failed login (intentional)"

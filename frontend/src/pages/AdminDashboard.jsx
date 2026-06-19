@@ -31,7 +31,7 @@ const ACTION_LABELS = {
   triage_assessment:         'AI triage — assessment',
 };
 
-const TABS = ['overview', 'patients', 'audit', 'ai-triage'];
+const TABS = ['overview', 'patients', 'audit', 'ai-triage', 'settings'];
 
 export default function AdminDashboard() {
   const [stats, setStats]       = useState(null);
@@ -347,6 +347,160 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* ── LLM SETTINGS ── */}
+        {tab === 'settings' && <LLMSettingsPanel />}
+      </div>
+    </div>
+  );
+}
+
+// ── LLM Settings Panel ───────────────────────────────────────
+function LLMSettingsPanel() {
+  const [settings, setSettings] = useState(null);
+  const [status, setStatus]     = useState(null);
+  const [form, setForm]         = useState({});
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+  const [error, setError]       = useState(null);
+
+  useEffect(() => {
+    api.get('/settings').then(data => {
+      setSettings(data);
+      setForm({
+        llm_provider:  data.current_provider,
+        claude_model:  data.settings?.claude_model?.value || 'claude-sonnet-4-6',
+        llm_model:     data.settings?.llm_model?.value || 'gemma4:e2b',
+        claude_api_key: '',
+      });
+    }).catch(() => {});
+    api.get('/settings/llm-status').then(setStatus).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setSaving(true); setSaved(false); setError(null);
+    try {
+      const payload = { llm_provider: form.llm_provider, claude_model: form.claude_model, llm_model: form.llm_model };
+      if (form.claude_api_key) payload.claude_api_key = form.claude_api_key;
+      await api.patch('/settings', payload);
+      setSaved(true);
+      setTimeout(() => api.get('/settings/llm-status').then(setStatus).catch(() => {}), 1000);
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const testConnection = () => { setStatus(null); api.get('/settings/llm-status').then(setStatus).catch(() => {}); };
+
+  if (!settings) return <div className="loading">Loading settings…</div>;
+
+  const isOllama = form.llm_provider === 'ollama';
+  const statusColor = status?.status === 'connected' ? 'var(--green)' : status?.status === 'error' ? 'var(--red)' : 'var(--amber)';
+
+  return (
+    <div>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>AI Provider Settings</div>
+        <p className="text-muted" style={{ fontSize: 13, marginBottom: 20 }}>
+          Controls which AI model powers triage and surveillance reports. Changes take effect immediately.
+        </p>
+
+        <div style={{ marginBottom: 20 }}>
+          <label className="form-label">AI Provider</label>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            {[
+              { value: 'ollama', label: '\uD83D\uDDA5\uFE0F Ollama (Local)', sub: 'Runs on your server — private, no API cost' },
+              { value: 'claude', label: '\u2601\uFE0F Claude (Anthropic)', sub: 'Faster, more capable — requires API key' },
+            ].map(p => (
+              <div key={p.value} onClick={() => setForm(f => ({ ...f, llm_provider: p.value }))}
+                style={{ flex: 1, padding: '14px 16px', borderRadius: 10, cursor: 'pointer',
+                  border: `2px solid ${form.llm_provider === p.value ? 'var(--green)' : 'var(--gray-200)'}`,
+                  background: form.llm_provider === p.value ? '#E1F5EE' : 'white' }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{p.label}</div>
+                <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>{p.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {isOllama && (
+          <div style={{ marginBottom: 16 }}>
+            <label className="form-label">Ollama Model</label>
+            <select className="input" value={form.llm_model} onChange={e => setForm(f => ({ ...f, llm_model: e.target.value }))}>
+              {(settings.ollama_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+            <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Model must already be pulled on Ollama.</p>
+          </div>
+        )}
+
+        {!isOllama && (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <label className="form-label">Claude Model</label>
+              <select className="input" value={form.claude_model} onChange={e => setForm(f => ({ ...f, claude_model: e.target.value }))}>
+                {(settings.claude_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label className="form-label">
+                Anthropic API Key
+                {settings.env_api_key_set && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--green)', fontWeight: 400 }}>✓ ANTHROPIC_API_KEY env var is set</span>}
+              </label>
+              <input type="password" className="input"
+                placeholder={settings.settings?.claude_api_key?.is_set ? 'Key already set — paste to update' : settings.env_api_key_set ? 'Using env var — paste to override' : 'sk-ant-api03-…'}
+                value={form.claude_api_key} onChange={e => setForm(f => ({ ...f, claude_api_key: e.target.value }))} />
+              <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Leave blank to keep existing key. Must start with <code>sk-ant-</code>.</p>
+            </div>
+          </>
+        )}
+
+        {status && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8,
+            background: 'var(--color-background-secondary)', border: '1px solid var(--color-border-tertiary)', marginBottom: 16 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+            <div style={{ fontSize: 13 }}>
+              <strong>{status.provider === 'claude' ? 'Claude' : 'Ollama'}</strong>{' — '}{status.status}
+              {status.active_model && <span className="text-muted"> · {status.active_model}</span>}
+              {status.error && <span style={{ color: 'var(--red)', marginLeft: 8 }}>{status.error}</span>}
+            </div>
+            <button onClick={testConnection} className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', fontSize: 12 }}>Test</button>
+          </div>
+        )}
+
+        {saved && <div style={{ padding: '10px 14px', borderRadius: 8, background: '#E1F5EE', border: '1px solid #9FE1CB', color: '#085041', fontSize: 13, marginBottom: 12 }}>✅ Settings saved. New provider active immediately.</div>}
+        {error && <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FCEBEB', border: '1px solid #F7C1C1', color: '#791F1F', fontSize: 13, marginBottom: 12 }}>❌ {error}</div>}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={save} disabled={saving} className="btn btn-primary">{saving ? 'Saving…' : 'Save settings'}</button>
+          <button onClick={testConnection} className="btn btn-secondary">Test connection</button>
+        </div>
+      </div>
+
+      <div className="card" style={{ background: 'var(--color-background-secondary)' }}>
+        <div style={{ fontWeight: 600, marginBottom: 10 }}>Provider comparison</div>
+        <table style={{ fontSize: 13, width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr style={{ borderBottom: '1px solid var(--color-border-secondary)' }}>
+            <th style={{ textAlign: 'left', padding: '6px 0' }}>Feature</th>
+            <th style={{ textAlign: 'center', padding: '6px 8px' }}>Ollama (Local)</th>
+            <th style={{ textAlign: 'center', padding: '6px 8px' }}>Claude (API)</th>
+          </tr></thead>
+          <tbody>
+            {[
+              ['Speed (triage reply)', '~30–60s', '~3–8s'],
+              ['Speed (surveillance report)', '~3–5 min', '~15–30s'],
+              ['Cost', 'Free (electricity only)', 'Per token (~$0.003/report)'],
+              ['Data privacy', '100% on-server', 'Sent to Anthropic API'],
+              ['Report quality', 'Good (Gemma 4)', 'Excellent (Claude)'],
+              ['Internet required', 'No — works offline', 'Yes'],
+              ['Best for', 'Production in GIDA', 'Demo / fast reporting'],
+            ].map(([f, o, c]) => (
+              <tr key={f} style={{ borderBottom: '1px solid var(--color-border-tertiary)' }}>
+                <td style={{ padding: '8px 0', color: 'var(--color-text-secondary)' }}>{f}</td>
+                <td style={{ textAlign: 'center', padding: 8 }}>{o}</td>
+                <td style={{ textAlign: 'center', padding: 8 }}>{c}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

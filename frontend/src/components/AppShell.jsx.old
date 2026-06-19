@@ -5,26 +5,21 @@ import CHWPage from '../pages/CHWPage';
 import ClinicianPage from '../pages/ClinicianPage';
 import AdminDashboard from '../pages/AdminDashboard';
 import TriagePage from '../pages/TriagePage';
-import SurveillanceDashboard from '../pages/SurveillanceDashboard';
 
 const NAV = {
   patient: [
-    { key: 'portal',   icon: '🏠', label: 'My Health Record' },
-    { key: 'triage',   icon: '🤖', label: 'AI Pre-Screening', badge: 'NEW' },
-    { key: 'symptoms', icon: '🤒', label: 'Report Symptoms' },
-    { key: 'consult',  icon: '📅', label: 'Consultations' },
+    { key: 'portal',  icon: '🏠', label: 'My Health Record' },
+    { key: 'triage',  icon: '🤖', label: 'AI Pre-Screening', badge: 'NEW' },
+    { key: 'consult', icon: '📅', label: 'Consultations' },
   ],
   chw: [
-    { key: 'patients',     icon: '👥', label: 'Patients' },
-    { key: 'surveillance', icon: '🦠', label: 'Surveillance' },
+    { key: 'patients', icon: '👥', label: 'Patients' },
   ],
   clinician: [
     { key: 'consultations', icon: '🩺', label: 'Consultations' },
-    { key: 'surveillance',  icon: '🦠', label: 'Surveillance' },
   ],
   admin: [
-    { key: 'dashboard',    icon: '📊', label: 'Dashboard' },
-    { key: 'surveillance', icon: '🦠', label: 'Surveillance' },
+    { key: 'dashboard', icon: '📊', label: 'Dashboard' },
   ],
 };
 
@@ -37,18 +32,18 @@ export default function AppShell() {
   const [active, setActive] = useState(navItems[0]?.key);
 
   function renderPage() {
-    // Surveillance tab — available to all roles that have it in NAV
-    if (active === 'surveillance') return <SurveillanceDashboard />;
-    if (active === 'symptoms')    return <SurveillanceDashboard defaultTab='report-symptoms' />;
+    const role = auth.role;
+    if (role === 'chw') return <CHWPage />;
+    if (role === 'clinician') return <ClinicianPage />;
+    if (role === 'admin') return <AdminDashboard />;
 
-    // Role defaults
-    if (auth.role === 'admin')     return <AdminDashboard />;
-    if (auth.role === 'chw')       return <CHWPage />;
-    if (auth.role === 'clinician') return <ClinicianPage />;
-
-    // Patient tabs
-    if (active === 'triage')  return <TriagePage onBookConsult={() => setActive('consult')} />;
-    if (active === 'consult') return <PatientPortal initialTab="consultations" />;
+    // Patient — multi-tab
+    if (active === 'triage') return (
+      <TriagePage onBookConsult={() => setActive('consult')} />
+    );
+    if (active === 'consult') return (
+      <PatientPortal initialTab="consultations" />
+    );
     return <PatientPortal initialTab="overview" />;
   }
 
